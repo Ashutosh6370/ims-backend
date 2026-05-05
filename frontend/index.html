@@ -3,20 +3,17 @@
 <head>
     <title>IMS Dashboard</title>
     <style>
-        body {
-            font-family: Arial;
-            margin: 20px;
-        }
-
-        h2 {
-            margin-top: 30px;
-        }
+        body { font-family: Arial; margin: 20px; }
 
         .incident {
             border: 1px solid #ccc;
             padding: 10px;
             margin-bottom: 10px;
             cursor: pointer;
+        }
+
+        .incident.selected {
+            border: 2px solid black;
         }
 
         .high { background: #ffcccc; }
@@ -26,7 +23,6 @@
         .badge {
             padding: 3px 8px;
             border-radius: 5px;
-            font-size: 12px;
             color: white;
         }
 
@@ -35,7 +31,7 @@
         .RESOLVED { background: orange; }
         .CLOSED { background: green; }
 
-        input, textarea {
+        input {
             width: 100%;
             margin: 5px 0;
             padding: 8px;
@@ -44,7 +40,6 @@
         button {
             padding: 8px 15px;
             margin-top: 10px;
-            cursor: pointer;
         }
     </style>
 </head>
@@ -72,23 +67,40 @@
 
 <script>
 const API = "http://localhost:8000";
+let selectedComponent = null;
 
+// -----------------------------
+// LOAD INCIDENTS
+// -----------------------------
 async function loadIncidents() {
     try {
         const res = await fetch(API + "/incidents");
+
+        if (!res.ok) {
+            console.error("API failed:", res.status);
+            return;
+        }
+
         const data = await res.json();
+        console.log("INCIDENTS:", data); // DEBUG
 
         const container = document.getElementById("incidentList");
         container.innerHTML = "";
 
-        const incidents = (data instanceof Array) ? data : Object.values(data);
+        const incidents = Array.isArray(data) ? data : Object.values(data);
 
         incidents.forEach(inc => {
             const div = document.createElement("div");
 
-            const severity = inc.signals[0]?.severity || "low";
+            const severity = (inc.signals && inc.signals.length > 0)
+                ? inc.signals[inc.signals.length - 1].severity.toLowerCase()
+                : "low";
 
             div.className = "incident " + severity;
+
+            if (inc.component_id === selectedComponent) {
+                div.classList.add("selected");
+            }
 
             div.innerHTML = `
                 <b>${inc.component_id}</b> |
@@ -96,29 +108,56 @@ async function loadIncidents() {
                 <span class="badge ${inc.status}">${inc.status}</span>
             `;
 
-            div.onclick = () => showDetails(inc);
+            div.onclick = () => {
+                console.log("CLICKED:", inc); // DEBUG
+                selectedComponent = inc.component_id;
+                showDetails(inc);
+            };
 
             container.appendChild(div);
         });
 
+        // Auto-select first incident if none selected
+        if (!selectedComponent && incidents.length > 0) {
+            selectedComponent = incidents[0].component_id;
+        }
+
+        // Always refresh details with latest data
+        if (selectedComponent) {
+            const latest = incidents.find(i => i.component_id === selectedComponent);
+            if (latest) {
+                showDetails(latest);
+            }
+        }
+
         if (incidents.length === 0) {
-            container.innerHTML = "<p>No active incidents</p>";
+            document.getElementById("details").innerHTML = "<p>No incidents</p>";
         }
 
     } catch (err) {
-        console.error("Error fetching incidents:", err);
+        console.error("Error:", err);
     }
 }
 
+// -----------------------------
+// SHOW DETAILS
+// -----------------------------
 function showDetails(inc) {
     const d = document.getElementById("details");
 
-    let signals = inc.signals.map(s => `<li>${s.message}</li>`).join("");
+    if (!inc) {
+        d.innerHTML = "<p>No data</p>";
+        return;
+    }
+
+    const signals = (inc.signals && inc.signals.length > 0)
+        ? inc.signals.map(s => `<li>${s.message}</li>`).join("")
+        : "<li>No signals</li>";
 
     d.innerHTML = `
         <p><b>Component:</b> ${inc.component_id}</p>
         <p><b>Status:</b> ${inc.status}</p>
-        <p><b>Created:</b> ${inc.created_at}</p>
+        <p><b>Created:</b> ${inc.created_at || "-"}</p>
         <p><b>Closed:</b> ${inc.closed_at || "-"}</p>
         <p><b>MTTR:</b> ${inc.mttr || "-"}</p>
 
@@ -127,17 +166,33 @@ function showDetails(inc) {
     `;
 }
 
+// -----------------------------
+// RESOLVE
+// -----------------------------
 async function resolveIncident() {
     const id = document.getElementById("resolveId").value;
 
-    await fetch(`${API}/incident/${id}/resolve`, {
+    if (!id) return alert("Enter component_id");
+
+    const res = await fetch(`${API}/incident/${id}/resolve`, {
         method: "POST"
     });
 
+    if (!res.ok) {
+        alert("Resolve failed");
+        return;
+    }
+
     alert("Resolved!");
+
+    document.getElementById("resolveId").value = "";
+
     loadIncidents();
 }
 
+// -----------------------------
+// CLOSE
+// -----------------------------
 async function closeIncident() {
     const id = document.getElementById("closeId").value;
 
@@ -145,7 +200,11 @@ async function closeIncident() {
     const fix = document.getElementById("fix").value;
     const prev = document.getElementById("prev").value;
 
-    await fetch(`${API}/incident/${id}/close`, {
+    if (!id || !root || !fix || !prev) {
+        return alert("Fill all fields");
+    }
+
+    const res = await fetch(`${API}/incident/${id}/close`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -155,16 +214,31 @@ async function closeIncident() {
         })
     });
 
+    if (!res.ok) {
+        const err = await res.json();
+        alert(err.detail);
+        return;
+    }
+
     alert("Closed!");
+
+    document.getElementById("closeId").value = "";
+    document.getElementById("root").value = "";
+    document.getElementById("fix").value = "";
+    document.getElementById("prev").value = "";
+
     loadIncidents();
 }
 
-// auto refresh every 5 sec
+// -----------------------------
+// AUTO REFRESH
+// -----------------------------
 setInterval(loadIncidents, 5000);
 
-// initial load
+// Initial load
 loadIncidents();
 </script>
 
 </body>
 </html>
+

@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
 import asyncio
@@ -8,21 +9,27 @@ from collections import defaultdict, deque
 
 app = FastAPI()
 
+# CORS FIX 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # -----------------------------
 # DATA STORES
 # -----------------------------
-signals_db = []          # Raw audit log (NoSQL simulation)
-incidents_db = {}        # Source of truth
+signals_db = []
+incidents_db = {}
 signal_queue = asyncio.Queue()
 
-# Debounce buffer (10 sec window)
 signal_buffer = defaultdict(deque)
 
-# Rate limiting
 request_times = defaultdict(deque)
-RATE_LIMIT = 50  # requests per 10 sec per client
+RATE_LIMIT = 50
 
-# Metrics
 metrics = {
     "signals_processed": 0,
     "incidents_created": 0
@@ -42,7 +49,7 @@ class RCA(BaseModel):
     prevention: str
 
 # -----------------------------
-# HEALTH + METRICS
+# HEALTH
 # -----------------------------
 @app.get("/health")
 def health():
@@ -54,7 +61,7 @@ def health():
     }
 
 # -----------------------------
-# RATE LIMIT MIDDLEWARE
+# RATE LIMIT
 # -----------------------------
 @app.middleware("http")
 async def rate_limiter(request: Request, call_next):
@@ -68,15 +75,12 @@ async def rate_limiter(request: Request, call_next):
         q.popleft()
 
     if len(q) > RATE_LIMIT:
-        return JSONResponse(
-            status_code=429,
-            content={"detail": "Rate limit exceeded"}
-        )
+        return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
 
     return await call_next(request)
 
 # -----------------------------
-# ASYNC WORKER (CORE ENGINE)
+# WORKER
 # -----------------------------
 async def signal_worker():
     while True:
@@ -85,17 +89,14 @@ async def signal_worker():
         comp = signal["component_id"]
         now = time.time()
 
-        # Store raw signal (audit log)
         signals_db.append(signal)
 
-        # Debounce logic (10 sec window)
         buffer = signal_buffer[comp]
         buffer.append((now, signal))
 
         while buffer and now - buffer[0][0] > 10:
             buffer.popleft()
 
-        # Create incident if not exists
         if comp not in incidents_db:
             incidents_db[comp] = {
                 "component_id": comp,
@@ -110,10 +111,8 @@ async def signal_worker():
 
         incident = incidents_db[comp]
 
-        # Attach debounced signals
         incident["signals"] = [s for _, s in buffer]
 
-        # State transition
         if incident["status"] == "OPEN":
             incident["status"] = "INVESTIGATING"
 
@@ -122,7 +121,7 @@ async def signal_worker():
         signal_queue.task_done()
 
 # -----------------------------
-# METRICS LOGGER (Every 5 sec)
+# METRICS LOGGER
 # -----------------------------
 async def metrics_logger():
     prev = 0
@@ -141,23 +140,17 @@ async def startup():
     asyncio.create_task(metrics_logger())
 
 # -----------------------------
-# INGEST SIGNAL
+# API
 # -----------------------------
 @app.post("/signal")
 async def receive_signal(signal: Signal):
     await signal_queue.put(signal.dict())
     return {"status": "queued"}
 
-# -----------------------------
-# GET RAW SIGNALS
-# -----------------------------
 @app.get("/signals")
 def get_signals():
     return signals_db
 
-# -----------------------------
-# GET INCIDENTS (SORTED BY SEVERITY)
-# -----------------------------
 @app.get("/incidents")
 def get_incidents():
     priority = {"high": 1, "medium": 2, "low": 3}
@@ -166,15 +159,14 @@ def get_incidents():
 
     def get_severity(incident):
         if incident["signals"]:
-            return priority.get(incident["signals"][-1]["severity"], 3)
+            return priority.get(
+                incident["signals"][-1]["severity"].lower(), 3
+            )
         return 3
 
     incidents.sort(key=get_severity)
     return incidents
 
-# -----------------------------
-# RESOLVE INCIDENT
-# -----------------------------
 @app.post("/incident/{component_id}/resolve")
 def resolve(component_id: str):
     if component_id not in incidents_db:
@@ -183,9 +175,6 @@ def resolve(component_id: str):
     incidents_db[component_id]["status"] = "RESOLVED"
     return {"status": "resolved"}
 
-# -----------------------------
-# CLOSE INCIDENT (RCA REQUIRED)
-# -----------------------------
 @app.post("/incident/{component_id}/close")
 def close(component_id: str, rca: RCA):
     if component_id not in incidents_db:

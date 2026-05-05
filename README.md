@@ -138,3 +138,4 @@ Incident lifecycle enforcement
 Clean and scalable backend design
 
 ⭐ Built as part of an engineering challenge to simulate production-grade incident management systems.
+
