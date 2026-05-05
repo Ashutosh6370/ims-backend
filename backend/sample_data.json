@@ -1,0 +1,17 @@
+[
+  {
+    "component_id": "db1",
+    "severity": "high",
+    "message": "RDBMS outage"
+  },
+  {
+    "component_id": "cache1",
+    "severity": "medium",
+    "message": "Cache latency spike"
+  },
+  {
+    "component_id": "api1",
+    "severity": "high",
+    "message": "API timeout"
+  }
+]

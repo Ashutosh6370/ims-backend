@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>IMS Dashboard</title>
+</head>
+<body>
+  <h1>Incident Dashboard</h1>
+
+  <button onclick="loadIncidents()">Load Incidents</button>
+
+  <pre id="output"></pre>
+
+  <script>
+    async function loadIncidents() {
+      const res = await fetch("http://localhost:8000/incidents");
+      const data = await res.json();
+      document.getElementById("output").innerText =
+        JSON.stringify(data, null, 2);
+    }
+  </script>
+</body>
+</html>
