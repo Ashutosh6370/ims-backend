@@ -1,22 +1,80 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>IMS Dashboard</title>
+    <title>IMS Dashboard</title>
 </head>
 <body>
-  <h1>Incident Dashboard</h1>
 
-  <button onclick="loadIncidents()">Load Incidents</button>
+<h1>🚨 Incident Dashboard</h1>
 
-  <pre id="output"></pre>
+<button onclick="loadIncidents()">Refresh</button>
 
-  <script>
-    async function loadIncidents() {
-      const res = await fetch("http://localhost:8000/incidents");
-      const data = await res.json();
-      document.getElementById("output").innerText =
-        JSON.stringify(data, null, 2);
-    }
-  </script>
+<ul id="incidentList"></ul>
+
+<h2>Incident Details</h2>
+<pre id="details"></pre>
+
+<h2>Resolve Incident</h2>
+<input id="resolveId" placeholder="component_id">
+<button onclick="resolveIncident()">Resolve</button>
+
+<h2>Close Incident (RCA)</h2>
+<input id="closeId" placeholder="component_id"><br>
+<input id="root" placeholder="root cause"><br>
+<input id="fix" placeholder="fix"><br>
+<input id="prevention" placeholder="prevention"><br>
+<button onclick="closeIncident()">Close</button>
+
+<script>
+async function loadIncidents() {
+    const res = await fetch("http://localhost:8000/incidents");
+    const data = await res.json();
+
+    const list = document.getElementById("incidentList");
+    list.innerHTML = "";
+
+    data.forEach(i => {
+        const li = document.createElement("li");
+        li.innerText = i.component_id + " - " + i.status;
+        li.onclick = () => showDetails(i);
+        list.appendChild(li);
+    });
+}
+
+function showDetails(i) {
+    document.getElementById("details").innerText = JSON.stringify(i, null, 2);
+}
+
+async function resolveIncident() {
+    const id = document.getElementById("resolveId").value;
+
+    await fetch(`http://localhost:8000/incident/${id}/resolve`, {
+        method: "POST"
+    });
+
+    loadIncidents();
+}
+
+async function closeIncident() {
+    const id = document.getElementById("closeId").value;
+
+    const body = {
+        root_cause: document.getElementById("root").value,
+        fix: document.getElementById("fix").value,
+        prevention: document.getElementById("prevention").value
+    };
+
+    await fetch(`http://localhost:8000/incident/${id}/close`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body)
+    });
+
+    loadIncidents();
+}
+</script>
+
 </body>
 </html>
