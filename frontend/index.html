@@ -2,78 +2,168 @@
 <html>
 <head>
     <title>IMS Dashboard</title>
+    <style>
+        body {
+            font-family: Arial;
+            margin: 20px;
+        }
+
+        h2 {
+            margin-top: 30px;
+        }
+
+        .incident {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+
+        .high { background: #ffcccc; }
+        .medium { background: #fff3cd; }
+        .low { background: #d4edda; }
+
+        .badge {
+            padding: 3px 8px;
+            border-radius: 5px;
+            font-size: 12px;
+            color: white;
+        }
+
+        .OPEN { background: gray; }
+        .INVESTIGATING { background: blue; }
+        .RESOLVED { background: orange; }
+        .CLOSED { background: green; }
+
+        input, textarea {
+            width: 100%;
+            margin: 5px 0;
+            padding: 8px;
+        }
+
+        button {
+            padding: 8px 15px;
+            margin-top: 10px;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
 
-<h1>🚨 Incident Dashboard</h1>
-
+<h1> Incident Dashboard</h1>
 <button onclick="loadIncidents()">Refresh</button>
 
-<ul id="incidentList"></ul>
+<h2>Live Incidents</h2>
+<div id="incidentList"></div>
 
 <h2>Incident Details</h2>
-<pre id="details"></pre>
+<div id="details"></div>
 
 <h2>Resolve Incident</h2>
 <input id="resolveId" placeholder="component_id">
 <button onclick="resolveIncident()">Resolve</button>
 
 <h2>Close Incident (RCA)</h2>
-<input id="closeId" placeholder="component_id"><br>
-<input id="root" placeholder="root cause"><br>
-<input id="fix" placeholder="fix"><br>
-<input id="prevention" placeholder="prevention"><br>
+<input id="closeId" placeholder="component_id">
+<input id="root" placeholder="root cause">
+<input id="fix" placeholder="fix">
+<input id="prev" placeholder="prevention">
 <button onclick="closeIncident()">Close</button>
 
 <script>
+const API = "http://localhost:8000";
+
 async function loadIncidents() {
-    const res = await fetch("http://localhost:8000/incidents");
-    const data = await res.json();
+    try {
+        const res = await fetch(API + "/incidents");
+        const data = await res.json();
 
-    const list = document.getElementById("incidentList");
-    list.innerHTML = "";
+        const container = document.getElementById("incidentList");
+        container.innerHTML = "";
 
-    data.forEach(i => {
-        const li = document.createElement("li");
-        li.innerText = i.component_id + " - " + i.status;
-        li.onclick = () => showDetails(i);
-        list.appendChild(li);
-    });
+        const incidents = (data instanceof Array) ? data : Object.values(data);
+
+        incidents.forEach(inc => {
+            const div = document.createElement("div");
+
+            const severity = inc.signals[0]?.severity || "low";
+
+            div.className = "incident " + severity;
+
+            div.innerHTML = `
+                <b>${inc.component_id}</b> |
+                ${severity.toUpperCase()} |
+                <span class="badge ${inc.status}">${inc.status}</span>
+            `;
+
+            div.onclick = () => showDetails(inc);
+
+            container.appendChild(div);
+        });
+
+        if (incidents.length === 0) {
+            container.innerHTML = "<p>No active incidents</p>";
+        }
+
+    } catch (err) {
+        console.error("Error fetching incidents:", err);
+    }
 }
 
-function showDetails(i) {
-    document.getElementById("details").innerText = JSON.stringify(i, null, 2);
+function showDetails(inc) {
+    const d = document.getElementById("details");
+
+    let signals = inc.signals.map(s => `<li>${s.message}</li>`).join("");
+
+    d.innerHTML = `
+        <p><b>Component:</b> ${inc.component_id}</p>
+        <p><b>Status:</b> ${inc.status}</p>
+        <p><b>Created:</b> ${inc.created_at}</p>
+        <p><b>Closed:</b> ${inc.closed_at || "-"}</p>
+        <p><b>MTTR:</b> ${inc.mttr || "-"}</p>
+
+        <h4>Signals:</h4>
+        <ul>${signals}</ul>
+    `;
 }
 
 async function resolveIncident() {
     const id = document.getElementById("resolveId").value;
 
-    await fetch(`http://localhost:8000/incident/${id}/resolve`, {
+    await fetch(`${API}/incident/${id}/resolve`, {
         method: "POST"
     });
 
+    alert("Resolved!");
     loadIncidents();
 }
 
 async function closeIncident() {
     const id = document.getElementById("closeId").value;
 
-    const body = {
-        root_cause: document.getElementById("root").value,
-        fix: document.getElementById("fix").value,
-        prevention: document.getElementById("prevention").value
-    };
+    const root = document.getElementById("root").value;
+    const fix = document.getElementById("fix").value;
+    const prev = document.getElementById("prev").value;
 
-    await fetch(`http://localhost:8000/incident/${id}/close`, {
+    await fetch(`${API}/incident/${id}/close`, {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify(body)
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            root_cause: root,
+            fix: fix,
+            prevention: prev
+        })
     });
 
+    alert("Closed!");
     loadIncidents();
 }
+
+// auto refresh every 5 sec
+setInterval(loadIncidents, 5000);
+
+// initial load
+loadIncidents();
 </script>
 
 </body>

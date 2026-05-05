@@ -1,7 +1,13 @@
 services:
   ims-backend:
-    build: .
-    container_name: ims-backend
+    build:
+      context: ./backend
     ports:
       - "8000:8000"
-    restart: unless-stopped
+
+  ims-frontend:
+    image: nginx:alpine
+    ports:
+      - "3000:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html
