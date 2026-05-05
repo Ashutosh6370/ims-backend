@@ -1,141 +1,214 @@
-🚀 Incident Management System (IMS)
-🧠 Overview
+# Incident Management System (IMS)
 
-This project implements a resilient Incident Management System (IMS) designed to handle high-throughput signals from distributed systems and manage the full incident lifecycle with mandatory Root Cause Analysis (RCA).
+## Overview
 
-The system simulates real-world production scenarios where thousands of signals are generated and must be processed efficiently without failure.
+This project implements a resilient Incident Management System designed to handle high-throughput signals from distributed systems and manage the full incident lifecycle with mandatory Root Cause Analysis (RCA).
 
-🏗 Architecture
-🧱 Architecture Diagram
+The system simulates real-world production scenarios where large volumes of signals are ingested, processed asynchronously, and converted into actionable incidents.
+
+---
+
+## Architecture
+
+### Architecture Diagram
 
 Client → FastAPI → Rate Limiter → Async Queue → Worker
 ↓
 Debounce Engine
 ↓
-Incidents DB (Source of Truth)
-Signals DB (Audit Log)
+Incidents DB (Source of Truth) | Signals DB (Audit Log)
+↓
+Frontend Dashboard
 
-⚙️ Features
-Async signal ingestion using asyncio.Queue
-Handles burst traffic (simulated high throughput)
-Debounce logic (10-second window per component)
-Incident lifecycle:
-OPEN → INVESTIGATING → RESOLVED → CLOSED
-Mandatory RCA before closing incident
-MTTR (Mean Time To Repair) calculation
-Rate limiting (50 requests / 10 sec per IP)
-Health endpoint for observability
-🧰 Tech Stack
-Python
-FastAPI
-Uvicorn
-Docker & Docker Compose
-In-memory storage (simulating NoSQL + cache)
-🚀 How to Run
-Using Docker (Recommended)
-docker-compose up -d --build
+---
 
-Access Swagger UI:
-http://localhost:8000/docs
+## Dashboard Preview
 
-📡 API Endpoints
-🔍 Health Check
+![Dashboard](docs/images/dashboard.png)
+
+---
+
+## Repository Structure
+
+ims-project/
+├── backend/        (FastAPI service)
+├── frontend/       (UI dashboard via Nginx)
+├── docs/           (design, testing, backpressure)
+├── scripts/        (simulation scripts)
+├── sample_data.json
+├── docker-compose.yml
+└── README.md
+
+---
+
+## Features
+
+* Async signal ingestion using asyncio.Queue
+* Handles burst traffic efficiently
+* Debounce logic (10-second window per component)
+* Incident lifecycle:
+  OPEN → INVESTIGATING → RESOLVED → CLOSED
+* Mandatory RCA before closing incidents
+* MTTR (Mean Time To Repair) calculation
+* Rate limiting (50 requests / 10 sec per IP)
+* Health endpoint for observability
+* Live dashboard UI
+
+---
+
+## Tech Stack
+
+* Python (FastAPI)
+* Uvicorn
+* Docker & Docker Compose
+* Nginx (Frontend)
+* In-memory storage (simulating NoSQL + cache)
+
+---
+
+## How to Run
+
+```bash
+docker-compose up --build
+```
+
+### Access
+
+* Frontend UI: http://localhost:3000
+* Backend API Docs: http://localhost:8000/docs
+
+---
+
+## API Endpoints
+
+### Health
+
 GET /health
-Returns system status, processed signals, active incidents, and queue size
-📥 Signal Ingestion
+
+### Signal Ingestion
+
 POST /signal
-Ingest a new signal into the system (async queue)
 
-Request Body:
+Example:
 
+```json
 {
   "component_id": "db1",
   "severity": "high",
   "message": "Database failure"
 }
-📊 Data Retrieval
+```
+
+### Data Retrieval
+
 GET /signals
-Returns all raw signals (audit log)
 GET /incidents
-Returns all incidents (source of truth)
-🔄 Incident Workflow
+
+### Incident Workflow
+
 POST /incident/{component_id}/resolve
-Moves incident from INVESTIGATING → RESOLVED
 POST /incident/{component_id}/close
-Closes incident (requires mandatory RCA)
 
-Request Body:
+---
 
-{
-  "root_cause": "Database overload",
-  "fix": "Restarted DB service",
-  "prevention": "Added monitoring and pooling"
-}
-🔄 Backpressure Handling
+## Backpressure Handling
 
-The system uses an asynchronous queue (asyncio.Queue) to decouple signal ingestion from processing.
+The system is designed to handle burst traffic without failure.
 
-If incoming traffic exceeds processing speed:
+* Uses asyncio.Queue to buffer incoming signals
+* Worker processes signals asynchronously
+* API remains responsive under load
+* Rate limiting prevents overload
+* Debounce logic reduces duplicate incidents
 
-Signals are buffered in memory
-API remains responsive
-System avoids crashes and cascading failures
+### Trade-offs
 
-This simulates real-world backpressure handling in distributed systems.
+* In-memory queue is fast but not durable
+* Single worker limits scalability
+* Can be extended using Kafka or Redis
 
-🧪 How to Test
+---
 
-Start the system:
+## Simulation
 
-docker-compose up -d --build
-Open Swagger UI:
-http://localhost:8000/docs
-Send signals using /signal
-Check incidents:
-GET /incidents
-Resolve incident:
-POST /incident/{component_id}/resolve
-Close with RCA:
-POST /incident/{component_id}/close
-📥 Sample Signal
-{
-  "component_id": "db1",
-  "severity": "high",
-  "message": "Database failure"
-}
-🧩 Design Patterns Used
-Producer-Consumer Pattern → Async queue for ingestion
-State Machine Pattern → Incident lifecycle management
-Sliding Window Pattern → Debounce logic
-Middleware Pattern → Rate limiting
-📊 Observability
+Run failure simulation:
 
-The /health endpoint provides:
+```bash
+python scripts/simulate_failure.py
+```
 
-Total signals processed
-Active incidents
-Queue size
+This generates burst traffic and validates async processing and debounce behavior.
 
-This helps monitor system health and throughput.
+---
 
-⚠️ Limitations
-Uses in-memory storage (no persistence)
-Single worker (not horizontally scalable yet)
-No external message broker (Kafka/Redis not used)
-🚀 Future Improvements
-Add Redis/Kafka for real message queue
-Add PostgreSQL for persistent storage
-Build frontend dashboard (React)
-Add alerting (Email/Slack)
-Implement horizontal scaling
-🏁 Conclusion
+## Testing
+
+* Verified signal ingestion and incident creation
+* Validated lifecycle transitions
+* Negative testing:
+
+  * Close without resolve → rejected
+  * Close without RCA → rejected
+* UI testing for real-time updates
+
+---
+
+## Design Patterns Used
+
+* Producer-Consumer Pattern → Async queue
+* State Machine Pattern → Incident lifecycle
+* Sliding Window Pattern → Debounce logic
+* Middleware Pattern → Rate limiting
+
+---
+
+## Observability
+
+GET /health provides:
+
+* signals_processed
+* active_incidents
+* queue_size
+
+---
+
+## Limitations
+
+* In-memory storage (no persistence)
+* Single worker (not horizontally scalable)
+* No external message broker
+
+---
+
+## Design Decisions
+
+* Async queue chosen to handle burst traffic
+* Debounce prevents alert flooding
+* In-memory storage for simplicity and speed
+* System designed for easy extension to distributed systems
+
+---
+
+## Future Improvements
+
+* Integrate Kafka or Redis
+* Add PostgreSQL for persistence
+* WebSocket-based real-time UI
+* Alerting (Email/Slack)
+* Horizontal scaling
+
+---
+
+## Conclusion
 
 This project demonstrates:
 
-Handling high-throughput systems
-Async processing and backpressure control
-Incident lifecycle enforcement
-Clean and scalable backend design
+* Handling high-throughput distributed signals
+* Async processing and backpressure control
+* Incident lifecycle enforcement with RCA validation
+* Clean and extensible system design
+
+---
 
 ⭐ Built as part of an engineering challenge to simulate production-grade incident management systems.
 
